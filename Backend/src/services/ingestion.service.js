@@ -1,13 +1,11 @@
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const Dataset = require('../models/dataset.model');
+const File = require('../models/file.model');
 
 exports.processUpload = async (datasetName, uploadedFiles) => {
     // 1. Create Dataset
-    const dataset = await prisma.dataset.create({
-        data: {
-            name: datasetName,
-            status: 'Processing'
-        }
+    const dataset = await Dataset.create({
+        name: datasetName,
+        status: 'Processing'
     });
 
     // 2. Map files and determine format
@@ -30,9 +28,7 @@ exports.processUpload = async (datasetName, uploadedFiles) => {
     });
 
     // 3. Save files to DB
-    await prisma.file.createMany({
-        data: fileRecords
-    });
+    await File.insertMany(fileRecords);
 
-    return dataset;
+    return dataset.toJSON();
 };

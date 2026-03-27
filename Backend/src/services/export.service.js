@@ -1,19 +1,26 @@
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
 const fs = require('fs');
 const path = require('path');
+const Dataset = require('../models/dataset.model');
+const File = require('../models/file.model');
+const Metadata = require('../models/metadata.model');
 
 exports.createExport = async (datasetId, format = 'json') => {
-    const dataset = await prisma.dataset.findUnique({
-        where: { id: datasetId },
-        include: {
-            files: {
-                include: { metadata: true }
-            }
-        }
-    });
+    const dataset = await Dataset.findById(datasetId).lean();
 
     if (!dataset) throw new Error('Dataset not found');
+
+    const files = await File.find({ datasetId }).lean();
+    const metadataRecords = await Metadata.find({
+        fileId: { $in: files.map((file) => file._id) }
+    }).lean();
+    const metadataByFileId = new Map();
+
+    for (const meta of metadataRecords) {
+        const key = meta.fileId.toString();
+        const current = metadataByFileId.get(key) || [];
+        current.push(meta);
+        metadataByFileId.set(key, current);
+    }
 
     const exportDir = path.join(__dirname, '../../uploads/exports');
     if (!fs.existsSync(exportDir)) {
@@ -24,11 +31,11 @@ exports.createExport = async (datasetId, format = 'json') => {
     const exportPath = path.join(exportDir, exportFileName);
 
     if (format === 'json') {
-        const jsonData = dataset.files.map(f => ({
-            id: f.id,
+        const jsonData = files.map(f => ({
+            id: f._id.toString(),
             originalName: f.originalName,
             format: f.format,
-            metadata: f.metadata.map(m => ({
+            metadata: (metadataByFileId.get(f._id.toString()) || []).map(m => ({
                 tags: JSON.parse(m.tags || '[]'),
                 language: m.language,
                 sensitiveFlags: JSON.parse(m.sensitiveFlags || '[]')
@@ -37,12 +44,12 @@ exports.createExport = async (datasetId, format = 'json') => {
         fs.writeFileSync(exportPath, JSON.stringify(jsonData, null, 2));
     } else if (format === 'csv') {
         let csvData = 'FileID,OriginalName,Format,Tags,Language,SensitiveFlags\n';
-        dataset.files.forEach(f => {
-            const m = f.metadata[0]; // simplify to first metadata entry
+        files.forEach(f => {
+            const m = (metadataByFileId.get(f._id.toString()) || [])[0];
             const tags = m ? m.tags.replace(/,/g, ' ') : '[]';
             const language = m ? m.language : 'unknown';
             const sFlags = m ? m.sensitiveFlags.replace(/,/g, ' ') : '[]';
-            csvData += `${f.id},${f.originalName},${f.format},"${tags}",${language},"${sFlags}"\n`;
+            csvData += `${f._id.toString()},${f.originalName},${f.format},"${tags}",${language},"${sFlags}"\n`;
         });
         fs.writeFileSync(exportPath, csvData);
     } else {

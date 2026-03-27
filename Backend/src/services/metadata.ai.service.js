@@ -1,13 +1,13 @@
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
 const fs = require('fs');
+const File = require('../models/file.model');
+const Metadata = require('../models/metadata.model');
 
 exports.generateForDataset = async (datasetId) => {
-    const files = await prisma.file.findMany({ where: { datasetId } });
+    const files = await File.find({ datasetId });
 
     for (const file of files) {
-        const existingMetadata = await prisma.metadata.findFirst({
-            where: { fileId: file.id }
+        const existingMetadata = await Metadata.findOne({
+            fileId: file.id
         });
 
         if (existingMetadata) {
@@ -67,14 +67,12 @@ exports.generateForDataset = async (datasetId) => {
         }
 
         // Save metadata
-        await prisma.metadata.create({
-            data: {
-                fileId: file.id,
-                tags: JSON.stringify(tags),
-                language,
-                sensitiveFlags: JSON.stringify(sensitiveFlags),
-                confidenceScores: JSON.stringify(confidenceScores)
-            }
+        await Metadata.create({
+            fileId: file.id,
+            tags: JSON.stringify(tags),
+            language,
+            sensitiveFlags: JSON.stringify(sensitiveFlags),
+            confidenceScores: JSON.stringify(confidenceScores)
         });
     }
 };

@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const fs = require('fs');
 const path = require('path');
 const apiRoutes = require('./routes/api.routes');
+const { connectToDatabase } = require('./config/db');
 
 dotenv.config();
 
@@ -65,7 +66,15 @@ app.use((err, req, res, next) => {
     });
 });
 
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-    console.log(`Allowed CORS origins: ${allowedOrigins.join(', ')}`);
+async function startServer() {
+    await connectToDatabase();
+    app.listen(PORT, () => {
+        console.log(`Server is running on port ${PORT}`);
+        console.log(`Allowed CORS origins: ${allowedOrigins.join(', ')}`);
+    });
+}
+
+startServer().catch((error) => {
+    console.error('Failed to start server', error);
+    process.exit(1);
 });

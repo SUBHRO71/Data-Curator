@@ -1,6 +1,7 @@
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
 const fs = require('fs');
+const File = require('../models/file.model');
+const Metadata = require('../models/metadata.model');
+const ComplianceReport = require('../models/compliance-report.model');
 
 exports.analyzeDataset = async (datasetId) => {
     let overallScore = 100;
@@ -8,31 +9,39 @@ exports.analyzeDataset = async (datasetId) => {
     const warnings = [];
     const autoFixSuggestions = [];
 
-    const files = await prisma.file.findMany({
-        where: { datasetId },
-        include: { metadata: true }
-    });
+    const files = await File.find({ datasetId }).lean();
+    const fileIds = files.map((file) => file._id);
+    const metadataRecords = await Metadata.find({ fileId: { $in: fileIds } }).lean();
+    const metadataByFileId = new Map();
+
+    for (const meta of metadataRecords) {
+        const key = meta.fileId.toString();
+        const current = metadataByFileId.get(key) || [];
+        current.push(meta);
+        metadataByFileId.set(key, current);
+    }
 
     for (const file of files) {
+        const fileMetadata = metadataByFileId.get(file._id.toString()) || [];
         // Evaluate AI Extracted Metadata
-        for (const meta of file.metadata) {
+        for (const meta of fileMetadata) {
             const sensitiveFlags = JSON.parse(meta.sensitiveFlags || '[]');
             const tags = JSON.parse(meta.tags || '[]');
             
             if (sensitiveFlags.includes('contains_face')) {
                 overallScore -= 5;
-                warnings.push({ fileId: file.id, issue: 'Face detected in media. Ensure consent is collected.' });
+                warnings.push({ fileId: file._id.toString(), issue: 'Face detected in media. Ensure consent is collected.' });
                 autoFixSuggestions.push(`Blur faces in file ${file.originalName}`);
             }
             if (sensitiveFlags.includes('toxic_text')) {
                 overallScore -= 15;
-                violations.push({ fileId: file.id, issue: 'Toxic or harmful content detected in text.' });
+                violations.push({ fileId: file._id.toString(), issue: 'Toxic or harmful content detected in text.' });
                 autoFixSuggestions.push(`Redact harmful phrases or remove file ${file.originalName}`);
             }
             
             if (file.format === 'IMAGE' && !tags.includes('alt-text')) {
                 // Mock accessibility warning
-                warnings.push({ fileId: file.id, issue: 'Missing alt-text description for image data.' });
+                warnings.push({ fileId: file._id.toString(), issue: 'Missing alt-text description for image data.' });
                 autoFixSuggestions.push(`Generate alt-text for ${file.originalName}`);
                 overallScore -= 2;
             }
@@ -50,17 +59,17 @@ exports.analyzeDataset = async (datasetId) => {
 
                 if (ssnRegex.test(content)) {
                     overallScore -= 20;
-                    violations.push({ fileId: file.id, issue: 'PII Detected: SSN/Aadhaar like pattern found.' });
+                    violations.push({ fileId: file._id.toString(), issue: 'PII Detected: SSN/Aadhaar like pattern found.' });
                     autoFixSuggestions.push(`Redact SSN patterns in ${file.originalName}`);
                 }
                 if (phoneRegex.test(content)) {
                     overallScore -= 10;
-                    violations.push({ fileId: file.id, issue: 'PII Detected: Phone number found.' });
+                    violations.push({ fileId: file._id.toString(), issue: 'PII Detected: Phone number found.' });
                     autoFixSuggestions.push(`Redact phone patterns in ${file.originalName}`);
                 }
                 if (emailRegex.test(content)) {
                     overallScore -= 10;
-                    violations.push({ fileId: file.id, issue: 'PII Detected: Email address found.' });
+                    violations.push({ fileId: file._id.toString(), issue: 'PII Detected: Email address found.' });
                     autoFixSuggestions.push(`Redact email patterns in ${file.originalName}`);
                 }
             } catch(e) {
@@ -71,15 +80,13 @@ exports.analyzeDataset = async (datasetId) => {
 
     if (overallScore < 0) overallScore = 0;
 
-    const report = await prisma.complianceReport.create({
-        data: {
-            datasetId,
-            overallScore,
-            violations: JSON.stringify(violations),
-            warnings: JSON.stringify(warnings),
-            autoFixSuggestions: JSON.stringify(autoFixSuggestions)
-        }
+    const report = await ComplianceReport.create({
+        datasetId,
+        overallScore,
+        violations: JSON.stringify(violations),
+        warnings: JSON.stringify(warnings),
+        autoFixSuggestions: JSON.stringify(autoFixSuggestions)
     });
 
-    return report;
+    return report.toJSON();
 };
