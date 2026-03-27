@@ -60,7 +60,8 @@ export const resolveApiUrl = (path) => {
 
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
     if (apiBaseUrl.startsWith('http://') || apiBaseUrl.startsWith('https://')) {
-        return `${apiBaseUrl}${normalizedPath.replace(/^\/api/, '')}`;
+        const backendOrigin = apiBaseUrl.replace(/\/api\/?$/, '');
+        return `${backendOrigin}${normalizedPath}`;
     }
 
     return normalizedPath;

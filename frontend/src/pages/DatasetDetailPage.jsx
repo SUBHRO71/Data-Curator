@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { getDataset } from '../services/api';
 import { ShieldCheck, Tag, Download, Play, FileText, Image as ImageIcon, FileAudio, FileVideo } from 'lucide-react';
 
 const DatasetDetailPage = () => {
     const { id } = useParams();
-    const navigate = useNavigate();
     const [dataset, setDataset] = useState(null);
     const [loading, setLoading] = useState(true);
 
@@ -35,12 +34,13 @@ const DatasetDetailPage = () => {
     if (!dataset) return <div className="p-6">Dataset not found</div>;
 
     const report = dataset.complianceReports?.[0];
-    const scoreColor = report?.overallScore >= 90 ? 'text-emerald-500' 
-                        : report?.overallScore >= 70 ? 'text-amber-500' 
-                        : 'text-red-500';
+    const topViolations = report?.violations ? JSON.parse(report.violations) : [];
+    const scoreColor = report?.overallScore >= 90 ? 'text-emerald-500'
+        : report?.overallScore >= 70 ? 'text-amber-500'
+        : 'text-red-500';
 
     const getFileIcon = (format) => {
-        switch(format) {
+        switch (format) {
             case 'IMAGE': return <ImageIcon className="w-5 h-5 text-indigo-500" />;
             case 'AUDIO': return <FileAudio className="w-5 h-5 text-sky-500" />;
             case 'VIDEO': return <FileVideo className="w-5 h-5 text-rose-500" />;
@@ -67,7 +67,6 @@ const DatasetDetailPage = () => {
                 </div>
             </div>
 
-            {/* Quick Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex items-center">
                     <div className="p-4 bg-indigo-50 rounded-xl mr-4 text-indigo-600">
@@ -78,7 +77,7 @@ const DatasetDetailPage = () => {
                         <p className="text-2xl font-bold text-slate-900">{dataset.files?.length || 0}</p>
                     </div>
                 </div>
-                
+
                 <Link to={`/dataset/${dataset.id}/compliance`} className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex items-center hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer group">
                     <div className="p-4 bg-emerald-50 rounded-xl mr-4 text-emerald-600">
                         <ShieldCheck className="w-8 h-8" />
@@ -103,13 +102,12 @@ const DatasetDetailPage = () => {
                 </div>
             </div>
 
-            {/* Files List */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
                     <h3 className="text-lg font-semibold text-slate-900">Files & Metadata</h3>
                 </div>
                 <div className="divide-y divide-slate-100">
-                    {dataset.files?.map(file => (
+                    {dataset.files?.map((file) => (
                         <div key={file.id} className="p-6 flex flex-col sm:flex-row sm:items-start justify-between hover:bg-slate-50/50 transition-colors">
                             <div className="flex mb-4 sm:mb-0">
                                 <div className="mt-1 mr-4 rounded-lg bg-white shadow-sm border border-slate-100 p-2 h-10 w-10 flex items-center justify-center shrink-0">
@@ -117,8 +115,13 @@ const DatasetDetailPage = () => {
                                 </div>
                                 <div>
                                     <h4 className="text-sm font-bold text-slate-900">{file.originalName}</h4>
-                                    <p className="text-xs text-slate-500 mt-0.5">{(file.sizeBytes / 1024).toFixed(1)} KB • {file.format}</p>
-                                    
+                                    <p className="text-xs text-slate-500 mt-0.5">{(file.sizeBytes / 1024).toFixed(1)} KB | {file.format}</p>
+                                    {file.metadata?.[0]?.caption && (
+                                        <p className="mt-2 text-sm text-slate-600 max-w-2xl">
+                                            {file.metadata[0].caption}
+                                        </p>
+                                    )}
+
                                     <div className="mt-3 flex flex-wrap gap-2">
                                         {file.metadata?.[0]?.tags?.map((tag, idx) => (
                                             <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
@@ -126,9 +129,15 @@ const DatasetDetailPage = () => {
                                             </span>
                                         ))}
                                     </div>
+
+                                    {file.metadata?.[0]?.objects?.length > 0 && (
+                                        <p className="mt-3 text-xs text-slate-500">
+                                            Objects: {file.metadata[0].objects.join(', ')}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
-                            
+
                             {file.metadata?.[0]?.sensitiveFlags?.length > 0 && (
                                 <div className="sm:text-right shrink-0">
                                     <p className="text-xs font-semibold text-amber-600 mb-1">Flags Detected</p>
@@ -145,6 +154,25 @@ const DatasetDetailPage = () => {
                     ))}
                     {dataset.files?.length === 0 && (
                         <div className="p-8 text-center text-slate-500 text-sm">No files uploaded.</div>
+                    )}
+                </div>
+            </div>
+
+            <div className="mt-8 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
+                    <h3 className="text-lg font-semibold text-slate-900">Compliance Snapshot</h3>
+                </div>
+                <div className="p-6">
+                    {topViolations.length > 0 ? (
+                        <ul className="space-y-3">
+                            {topViolations.slice(0, 3).map((violation, idx) => (
+                                <li key={idx} className="text-sm text-slate-700">
+                                    {violation.issue}
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className="text-sm text-slate-500">No active compliance violations.</p>
                     )}
                 </div>
             </div>

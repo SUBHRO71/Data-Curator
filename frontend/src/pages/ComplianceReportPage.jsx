@@ -112,7 +112,7 @@ const ComplianceReportPage = () => {
                                             <span className="flex-shrink-0 h-1.5 w-1.5 rounded-full bg-red-500 mt-2 mr-3"></span>
                                             <div>
                                                 <p className="text-sm font-semibold text-slate-900">{v.issue}</p>
-                                                <p className="text-xs text-slate-500 mt-1">File ID: {v.fileId.split('-')[0]}</p>
+                                                <p className="text-xs text-slate-500 mt-1">File ID: {String(v.fileId).slice(0, 8)}</p>
                                             </div>
                                         </li>
                                     ))}

@@ -1,14 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getDataset, updateTags } from '../services/api';
+import { getDataset, resolveApiUrl, updateTags } from '../services/api';
 import { ArrowLeft, Save, Tag } from 'lucide-react';
 
 const AnnotationPage = () => {
     const { id } = useParams();
     const [dataset, setDataset] = useState(null);
     const [loading, setLoading] = useState(true);
-    
-    // State to hold local edits before saving
     const [editors, setEditors] = useState({});
 
     useEffect(() => {
@@ -19,10 +17,9 @@ const AnnotationPage = () => {
         try {
             const data = await getDataset(id);
             setDataset(data);
-            
-            // initialize editors state
+
             const initialEditors = {};
-            data.files.forEach(f => {
+            data.files.forEach((f) => {
                 if (f.metadata && f.metadata[0]) {
                     initialEditors[f.metadata[0].id] = f.metadata[0].tags.join(', ');
                 }
@@ -38,12 +35,12 @@ const AnnotationPage = () => {
     const handleSave = async (metadataId) => {
         try {
             const rawTags = editors[metadataId];
-            const tagsArray = rawTags.split(',').map(t => t.trim()).filter(t => t);
-            
+            const tagsArray = rawTags.split(',').map((t) => t.trim()).filter((t) => t);
+
             await updateTags(metadataId, tagsArray);
-            
+
             alert('Tags updated successfully!');
-            fetchData(); // Refresh UI
+            fetchData();
         } catch (error) {
             console.error(error);
             alert('Failed to update tags');
@@ -72,25 +69,40 @@ const AnnotationPage = () => {
             </div>
 
             <div className="space-y-6">
-                {dataset.files?.map(file => {
-                    const metaId = file.metadata?.[0]?.id;
+                {dataset.files?.map((file) => {
+                    const meta = file.metadata?.[0];
+                    const metaId = meta?.id;
                     if (!metaId) return null;
-                    
+
                     return (
                         <div key={file.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col md:flex-row md:items-start gap-6">
                             <div className="w-full md:w-1/3">
                                 <h3 className="text-sm font-bold text-slate-900 truncate mb-1">{file.originalName}</h3>
-                                <p className="text-xs text-slate-500 mb-4">{file.format} • {(file.sizeBytes / 1024).toFixed(1)} KB</p>
-                                
-                                {file.format === 'IMAGE' && (
+                                <p className="text-xs text-slate-500 mb-2">{file.format} | {(file.sizeBytes / 1024).toFixed(1)} KB</p>
+                                <p className="text-xs text-slate-400 mb-4">Source: {meta.processorSource || 'unknown'}</p>
+
+                                {file.format === 'IMAGE' ? (
+                                    <img
+                                        src={resolveApiUrl(file.mediaUrl)}
+                                        alt={file.originalName}
+                                        className="w-full aspect-video rounded-lg border border-slate-200 object-cover bg-slate-100"
+                                    />
+                                ) : (
                                     <div className="w-full aspect-video bg-slate-100 rounded-lg border border-slate-200 flex items-center justify-center">
                                         <span className="text-xs text-slate-400">Media Preview</span>
                                     </div>
                                 )}
                             </div>
-                            
+
                             <div className="w-full md:w-2/3 flex flex-col justify-between">
                                 <div>
+                                    {meta.caption && (
+                                        <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                                            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Caption</p>
+                                            <p className="mt-1 text-sm text-slate-700">{meta.caption}</p>
+                                        </div>
+                                    )}
+
                                     <label className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-2 flex items-center">
                                         <Tag className="w-3 h-3 mr-1" /> Meta Tags (comma separated)
                                     </label>
@@ -101,7 +113,7 @@ const AnnotationPage = () => {
                                         className="w-full rounded-lg border-0 py-2.5 px-3 text-slate-900 ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 transition-shadow resize-none"
                                     />
                                 </div>
-                                
+
                                 <div className="mt-4 flex justify-end">
                                     <button
                                         onClick={() => handleSave(metaId)}

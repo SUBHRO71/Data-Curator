@@ -1,6 +1,21 @@
-const fs = require('fs');
 const File = require('../models/file.model');
 const Metadata = require('../models/metadata.model');
+const { processTextFile } = require('./textProcessor');
+const { processImageFile } = require('./imageProcessor');
+
+function buildDefaultOutput(file) {
+    return {
+        type: file.format.toLowerCase(),
+        tags: ['unclassified'],
+        entities: [],
+        caption: '',
+        objects: [],
+        sensitive_flags: [],
+        pii_detected: false,
+        language: file.format === 'TEXT' ? 'unknown' : 'n/a',
+        source: 'default'
+    };
+}
 
 exports.generateForDataset = async (datasetId) => {
     const files = await File.find({ datasetId });
@@ -14,65 +29,24 @@ exports.generateForDataset = async (datasetId) => {
             continue;
         }
 
-        let tags = [];
-        let language = 'unknown';
-        let sensitiveFlags = [];
-        let confidenceScores = {};
+        let aiOutput = buildDefaultOutput(file);
 
-        // Mock AI Processing based on file format
         if (file.format === 'TEXT') {
-            language = 'en';
-            // Simple mock extraction based on file content. In real scenario, NLP model goes here.
-            try {
-                const content = fs.readFileSync(file.storedPath, 'utf-8');
-                if (content.toLowerCase().includes('invoice') || content.toLowerCase().includes('price')) {
-                    tags.push('receipt', 'finance');
-                    confidenceScores['finance'] = 0.95;
-                }
-                if (content.toLowerCase().includes('stupid') || content.toLowerCase().includes('hate')) {
-                    sensitiveFlags.push('toxic_text');
-                    confidenceScores['toxic_text'] = 0.88;
-                }
-                tags.push('document', 'text-data');
-            } catch (e) {
-                console.error('Error reading text file for AI meta extraction', e);
-            }
-        } 
-        else if (file.format === 'IMAGE') {
-            const ext = file.originalName.split('.').pop().toLowerCase();
-            tags.push('object', 'scene', ext);
-            confidenceScores['scene'] = 0.89;
-            confidenceScores['object'] = 0.92;
-            
-            // Randomly mock identifying a face
-            if (Math.random() > 0.7) {
-                tags.push('face');
-                sensitiveFlags.push('contains_face');
-                confidenceScores['face'] = 0.99;
-            }
-        }
-        else if (file.format === 'AUDIO') {
-            language = 'en';
-            tags.push('speech', 'conversation');
-            confidenceScores['speech'] = 0.98;
-        }
-        else if (file.format === 'VIDEO') {
-            tags.push('moving-objects', 'frames');
-            confidenceScores['moving-objects'] = 0.85;
-            if (Math.random() > 0.5) {
-                sensitiveFlags.push('contains_face');
-            }
-        } else {
-            tags.push('unclassified');
+            aiOutput = await processTextFile(file);
+        } else if (file.format === 'IMAGE') {
+            aiOutput = await processImageFile(file);
         }
 
         // Save metadata
         await Metadata.create({
             fileId: file.id,
-            tags: JSON.stringify(tags),
-            language,
-            sensitiveFlags: JSON.stringify(sensitiveFlags),
-            confidenceScores: JSON.stringify(confidenceScores)
+            tags: JSON.stringify(aiOutput.tags || []),
+            language: aiOutput.language || 'unknown',
+            sensitiveFlags: JSON.stringify(aiOutput.sensitive_flags || []),
+            confidenceScores: JSON.stringify({
+                ai: aiOutput,
+                generatedAt: new Date().toISOString()
+            })
         });
     }
 };

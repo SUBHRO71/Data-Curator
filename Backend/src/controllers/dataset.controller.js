@@ -2,6 +2,7 @@ const ingestionService = require('../services/ingestion.service');
 const metadataService = require('../services/metadata.ai.service');
 const complianceEngine = require('../services/compliance.engine');
 const exportService = require('../services/export.service');
+const path = require('path');
 const Dataset = require('../models/dataset.model');
 const File = require('../models/file.model');
 const Metadata = require('../models/metadata.model');
@@ -92,17 +93,29 @@ exports.getDataset = async (req, res) => {
             datasetId: f.datasetId.toString(),
             originalName: f.originalName,
             storedPath: f.storedPath,
+            mediaUrl: `/uploads/${path.basename(f.storedPath)}`,
             format: f.format,
             sizeBytes: f.sizeBytes,
             status: f.status,
-            metadata: (metadataByFileId.get(f._id.toString()) || []).map(m => ({
-                id: m._id.toString(),
-                fileId: m.fileId.toString(),
-                tags: JSON.parse(m.tags || '[]'),
-                language: m.language,
-                sensitiveFlags: JSON.parse(m.sensitiveFlags || '[]'),
-                confidenceScores: JSON.parse(m.confidenceScores || '{}')
-            }))
+            metadata: (metadataByFileId.get(f._id.toString()) || []).map(m => {
+                const parsedConfidenceScores = JSON.parse(m.confidenceScores || '{}');
+                const aiPayload = parsedConfidenceScores.ai || {};
+
+                return {
+                    id: m._id.toString(),
+                    fileId: m.fileId.toString(),
+                    type: aiPayload.type || f.format.toLowerCase(),
+                    tags: JSON.parse(m.tags || '[]'),
+                    language: m.language,
+                    entities: aiPayload.entities || [],
+                    caption: aiPayload.caption || '',
+                    objects: aiPayload.objects || [],
+                    piiDetected: Boolean(aiPayload.pii_detected),
+                    processorSource: aiPayload.source || 'unknown',
+                    sensitiveFlags: JSON.parse(m.sensitiveFlags || '[]'),
+                    confidenceScores: parsedConfidenceScores
+                };
+            })
         }));
 
         return sendSuccess(res, 200, {
