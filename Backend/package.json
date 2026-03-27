@@ -1,0 +1,27 @@
+{
+  "name": "dataset-curator-backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/index.js",
+  "scripts": {
+    "db:push": "prisma db push --schema prisma/schema.prisma",
+    "prestart": "npm run db:push",
+    "start": "node src/index.js",
+    "predev": "npm run db:push",
+    "dev": "nodemon src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "multer": "^1.4.5-lts.1",
+    "prisma": "^5.14.0",
+    "@prisma/client": "^5.14.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
