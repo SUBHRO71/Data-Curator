@@ -1,15 +1,39 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { BrainCircuit } from 'lucide-react';
+import { login, signup } from '../services/api';
 
 const AuthPage = () => {
     const navigate = useNavigate();
     const [isLogin, setIsLogin] = useState(true);
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        // Mock authentication, just redirect
-        navigate('/dashboard');
+        setError('');
+        setLoading(true);
+
+        const formData = new FormData(e.currentTarget);
+        const payload = {
+            name: formData.get('name'),
+            email: formData.get('email'),
+            password: formData.get('password')
+        };
+
+        try {
+            if (isLogin) {
+                await login({ email: payload.email, password: payload.password });
+            } else {
+                await signup(payload);
+            }
+            navigate('/dashboard');
+        } catch (submitError) {
+            console.error(submitError);
+            setError(submitError.message || 'Authentication failed');
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -65,12 +89,15 @@ const AuthPage = () => {
                         </div>
                     )}
 
-                    <div>
-                        <button type="submit" className="group relative flex w-full justify-center rounded-lg bg-indigo-600 px-3 py-3 text-sm font-semibold text-white hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-colors shadow-md hover:shadow-lg">
-                            {isLogin ? 'Sign in' : 'Create account'}
+                        <div>
+                            <button type="submit" className="group relative flex w-full justify-center rounded-lg bg-indigo-600 px-3 py-3 text-sm font-semibold text-white hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-colors shadow-md hover:shadow-lg">
+                            {loading ? 'Please wait...' : isLogin ? 'Sign in' : 'Create account'}
                         </button>
                     </div>
                 </form>
+                {error && (
+                    <p className="text-sm text-red-600 text-center">{error}</p>
+                )}
                 
                 <div className="mt-6 text-center">
                     <Link to="/" className="text-sm text-slate-500 hover:text-slate-700 font-medium">

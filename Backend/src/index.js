@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const fs = require('fs');
 const path = require('path');
 const apiRoutes = require('./routes/api.routes');
+const authRoutes = require('./routes/auth.routes');
 const { connectToDatabase } = require('./config/db');
 
 dotenv.config();
@@ -52,6 +53,7 @@ app.use((req, res, next) => {
 });
 
 app.use('/uploads', express.static(uploadsDir));
+app.use('/api/auth', authRoutes);
 app.use('/api', apiRoutes);
 
 app.use((err, req, res, next) => {

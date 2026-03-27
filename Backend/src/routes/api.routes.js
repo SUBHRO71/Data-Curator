@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const datasetController = require('../controllers/dataset.controller');
+const authMiddleware = require('../middleware/auth');
 
 // Multer storage config
 const storage = multer.diskStorage({
@@ -17,17 +18,17 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 // Routes
-router.post('/dataset/upload', upload.array('files'), datasetController.uploadDataset);
-router.get('/dataset/:id', datasetController.getDataset);
-router.get('/datasets', datasetController.getAllDatasets);
+router.post('/dataset/upload', authMiddleware, upload.array('files'), datasetController.uploadDataset);
+router.get('/dataset/:id', authMiddleware, datasetController.getDataset);
+router.get('/datasets', authMiddleware, datasetController.getAllDatasets);
 
-router.post('/metadata/generate', datasetController.generateMetadata);
-router.post('/metadata/update', datasetController.updateMetadata);
+router.post('/metadata/generate', authMiddleware, datasetController.generateMetadata);
+router.post('/metadata/update', authMiddleware, datasetController.updateMetadata);
 
-router.post('/compliance/check', datasetController.checkCompliance);
-router.get('/compliance/:dataset_id', datasetController.getComplianceReport);
+router.post('/compliance/check', authMiddleware, datasetController.checkCompliance);
+router.get('/compliance/:dataset_id', authMiddleware, datasetController.getComplianceReport);
 
-router.post('/export', datasetController.exportDataset);
-router.get('/download/:dataset_id', datasetController.downloadDataset);
+router.post('/export', authMiddleware, datasetController.exportDataset);
+router.get('/download/:dataset_id', authMiddleware, datasetController.downloadDataset);
 
 module.exports = router;

@@ -1,9 +1,10 @@
 const Dataset = require('../models/dataset.model');
 const File = require('../models/file.model');
 
-exports.processUpload = async (datasetName, uploadedFiles) => {
+exports.processUpload = async (datasetName, uploadedFiles, userId) => {
     // 1. Create Dataset
     const dataset = await Dataset.create({
+        userId,
         name: datasetName,
         status: 'Processing'
     });

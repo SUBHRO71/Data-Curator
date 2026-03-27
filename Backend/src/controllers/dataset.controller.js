@@ -8,6 +8,13 @@ const File = require('../models/file.model');
 const Metadata = require('../models/metadata.model');
 const ComplianceReport = require('../models/compliance-report.model');
 
+async function getOwnedDatasetOrNull(datasetId, userId) {
+    return Dataset.findOne({
+        _id: datasetId,
+        userId
+    }).lean();
+}
+
 function sendSuccess(res, statusCode, data) {
     return res.status(statusCode).json({
         status: 'success',
@@ -37,7 +44,7 @@ exports.uploadDataset = async (req, res) => {
         }
 
         const datasetStrName = name || 'Untitled Dataset ' + Date.now();
-        const dataset = await ingestionService.processUpload(datasetStrName, files);
+        const dataset = await ingestionService.processUpload(datasetStrName, files, req.user.userId);
         
         // Trigger background processing asynchronously without awaiting
         processDatasetAsync(dataset.id).catch(console.error);
@@ -68,7 +75,7 @@ async function processDatasetAsync(datasetId) {
 
 exports.getDataset = async (req, res) => {
     try {
-        const dataset = await Dataset.findById(req.params.id).lean();
+        const dataset = await getOwnedDatasetOrNull(req.params.id, req.user.userId);
         if (!dataset) return sendError(res, 404, 'Dataset not found');
 
         const files = await File.find({ datasetId: req.params.id }).lean();
@@ -143,7 +150,7 @@ exports.getDataset = async (req, res) => {
 
 exports.getAllDatasets = async (req, res) => {
     try {
-        const datasets = await Dataset.find().sort({ createdAt: -1 }).lean();
+        const datasets = await Dataset.find({ userId: req.user.userId }).sort({ createdAt: -1 }).lean();
         const reports = await ComplianceReport.find({
             datasetId: { $in: datasets.map((dataset) => dataset._id) }
         }).sort({ createdAt: -1 }).lean();
@@ -184,6 +191,8 @@ exports.getAllDatasets = async (req, res) => {
 exports.generateMetadata = async (req, res) => {
     try {
         const { datasetId } = req.body;
+        const dataset = await getOwnedDatasetOrNull(datasetId, req.user.userId);
+        if (!dataset) return sendError(res, 404, 'Dataset not found');
         await metadataService.generateForDataset(datasetId);
         return sendSuccess(res, 200, { message: 'Metadata generation triggered', datasetId });
     } catch (error) {
@@ -194,6 +203,18 @@ exports.generateMetadata = async (req, res) => {
 exports.updateMetadata = async (req, res) => {
     try {
         const { metadataId, tags } = req.body;
+        const metadata = await Metadata.findById(metadataId).lean();
+        if (!metadata) {
+            return sendError(res, 404, 'Metadata not found');
+        }
+        const file = await File.findById(metadata.fileId).lean();
+        if (!file) {
+            return sendError(res, 404, 'File not found');
+        }
+        const dataset = await getOwnedDatasetOrNull(file.datasetId, req.user.userId);
+        if (!dataset) {
+            return sendError(res, 403, 'You do not have access to this metadata');
+        }
         const updated = await Metadata.findByIdAndUpdate(
             metadataId,
             { tags: JSON.stringify(tags) },
@@ -208,6 +229,8 @@ exports.updateMetadata = async (req, res) => {
 exports.checkCompliance = async (req, res) => {
     try {
         const { datasetId } = req.body;
+        const dataset = await getOwnedDatasetOrNull(datasetId, req.user.userId);
+        if (!dataset) return sendError(res, 404, 'Dataset not found');
         const report = await complianceEngine.analyzeDataset(datasetId);
         return sendSuccess(res, 200, report);
     } catch (error) {
@@ -217,6 +240,8 @@ exports.checkCompliance = async (req, res) => {
 
 exports.getComplianceReport = async (req, res) => {
     try {
+        const dataset = await getOwnedDatasetOrNull(req.params.dataset_id, req.user.userId);
+        if (!dataset) return sendError(res, 404, 'Dataset not found');
         const report = await ComplianceReport.findOne({
             datasetId: req.params.dataset_id
         }).sort({ createdAt: -1 });
@@ -240,6 +265,8 @@ exports.getComplianceReport = async (req, res) => {
 exports.exportDataset = async (req, res) => {
     try {
         const { datasetId, format } = req.body; // format 'json' or 'csv'
+        const dataset = await getOwnedDatasetOrNull(datasetId, req.user.userId);
+        if (!dataset) return sendError(res, 404, 'Dataset not found');
         const fileName = await exportService.createExport(datasetId, format);
         return sendSuccess(res, 200, {
             fileName,
@@ -253,6 +280,8 @@ exports.exportDataset = async (req, res) => {
 
 exports.downloadDataset = async (req, res) => {
     try {
+        const dataset = await getOwnedDatasetOrNull(req.params.dataset_id, req.user.userId);
+        if (!dataset) return sendError(res, 404, 'Dataset not found');
         const exportedFile = await exportService.getExportFile(req.params.dataset_id, req.query.file);
         if (!exportedFile) {
             return sendError(res, 404, 'Export file not found. Please export first.');

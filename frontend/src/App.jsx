@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
+import ProtectedRoute from './components/ProtectedRoute';
 
 // Mock pages
 import LandingPage from './pages/LandingPage';
@@ -19,14 +20,15 @@ function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/auth" element={<AuthPage />} />
         
-        {/* Protected Routes Wrapper (Mocked via Layout) */}
-        <Route element={<Layout />}>
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/upload" element={<UploadPage />} />
-          <Route path="/dataset/:id" element={<DatasetDetailPage />} />
-          <Route path="/dataset/:id/compliance" element={<ComplianceReportPage />} />
-          <Route path="/dataset/:id/annotate" element={<AnnotationPage />} />
-          <Route path="/dataset/:id/export" element={<ExportPage />} />
+        <Route element={<ProtectedRoute />}>
+          <Route element={<Layout />}>
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/upload" element={<UploadPage />} />
+            <Route path="/dataset/:id" element={<DatasetDetailPage />} />
+            <Route path="/dataset/:id/compliance" element={<ComplianceReportPage />} />
+            <Route path="/dataset/:id/annotate" element={<AnnotationPage />} />
+            <Route path="/dataset/:id/export" element={<ExportPage />} />
+          </Route>
         </Route>
         
         <Route path="*" element={<Navigate to="/" replace />} />
