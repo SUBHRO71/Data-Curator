@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 
 const DEFAULT_TEXT_OUTPUT = {
     type: 'text',
@@ -10,6 +11,20 @@ const DEFAULT_TEXT_OUTPUT = {
     pii_detected: false,
     language: 'unknown',
     source: 'unknown'
+};
+
+const TEXT_MIME_TYPES = new Set([
+    'application/json',
+    'text/csv'
+]);
+
+const EXTENSION_TO_MIME = {
+    '.csv': 'text/csv',
+    '.json': 'application/json',
+    '.md': 'text/markdown',
+    '.pdf': 'application/pdf',
+    '.txt': 'text/plain',
+    '.xml': 'application/xml'
 };
 
 const GEMINI_SCHEMA = {
@@ -79,7 +94,43 @@ function buildFallbackTextOutput(content) {
     };
 }
 
-async function callGeminiForText(content) {
+function inferMimeType(file) {
+    if (file.mimeType) {
+        return file.mimeType;
+    }
+
+    return EXTENSION_TO_MIME[path.extname(file.originalName || '').toLowerCase()] || 'application/octet-stream';
+}
+
+function isTextLikeMimeType(mimeType) {
+    return mimeType.startsWith('text/') || TEXT_MIME_TYPES.has(mimeType);
+}
+
+function readTextPreview(file, mimeType) {
+    if (!isTextLikeMimeType(mimeType)) {
+        return '';
+    }
+
+    return fs.readFileSync(file.storedPath, 'utf-8');
+}
+
+function deriveOutputType(file, mimeType) {
+    if (file.format === 'DOCUMENT') {
+        return 'document';
+    }
+    if (file.format === 'AUDIO') {
+        return 'audio';
+    }
+    if (file.format === 'VIDEO') {
+        return 'video';
+    }
+    if (mimeType === 'application/pdf') {
+        return 'document';
+    }
+    return 'text';
+}
+
+async function callGeminiForFile(file, content, mimeType) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
         throw new Error('GEMINI_API_KEY is not configured');
@@ -88,11 +139,27 @@ async function callGeminiForText(content) {
     const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
     const modelPath = model.startsWith('models/') ? model : `models/${model}`;
     const prompt = [
-        'Extract dataset metadata from the following text and return valid JSON only.',
-        'Return concise tags and entities, detect whether PII is present, and add sensitive flags when appropriate.',
-        '',
-        content.slice(0, 15000)
+        'Extract dataset metadata from this uploaded file and return valid JSON only.',
+        'Recommend concise metatags, detect whether PII is present, and add sensitive flags when appropriate.',
+        `Filename: ${file.originalName}`,
+        `Detected format: ${file.format}`,
+        `MIME type: ${mimeType}`
     ].join('\n');
+    const parts = [{ text: prompt }];
+
+    if (content) {
+        parts.push({
+            text: `Text preview:\n${content.slice(0, 15000)}`
+        });
+    } else {
+        const fileBuffer = fs.readFileSync(file.storedPath);
+        parts.push({
+            inlineData: {
+                mimeType,
+                data: fileBuffer.toString('base64')
+            }
+        });
+    }
 
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${modelPath}:generateContent`, {
         method: 'POST',
@@ -102,7 +169,7 @@ async function callGeminiForText(content) {
         },
         body: JSON.stringify({
             contents: [{
-                parts: [{ text: prompt }]
+                parts
             }],
             generationConfig: {
                 responseMimeType: 'application/json',
@@ -124,11 +191,11 @@ async function callGeminiForText(content) {
     return extractJsonPayload(text);
 }
 
-function normalizeTextOutput(rawOutput) {
+function normalizeTextOutput(file, rawOutput, mimeType) {
     return {
         ...DEFAULT_TEXT_OUTPUT,
         ...rawOutput,
-        type: 'text',
+        type: deriveOutputType(file, mimeType),
         tags: uniqueNormalized(rawOutput.tags),
         entities: uniqueNormalized(rawOutput.entities),
         objects: uniqueNormalized(rawOutput.objects),
@@ -139,23 +206,27 @@ function normalizeTextOutput(rawOutput) {
     };
 }
 
-async function processTextFile(file) {
-    const content = fs.readFileSync(file.storedPath, 'utf-8');
+async function processNonImageFile(file) {
+    const mimeType = inferMimeType(file);
+    const content = readTextPreview(file, mimeType);
 
     try {
-        const aiOutput = normalizeTextOutput(await callGeminiForText(content));
-        console.log('[ai][text] Gemini output', { fileId: file.id, fileName: file.originalName, aiOutput });
+        const aiOutput = normalizeTextOutput(file, await callGeminiForFile(file, content, mimeType), mimeType);
+        console.log('[ai][file] Gemini output', { fileId: file.id, fileName: file.originalName, mimeType, aiOutput });
         return aiOutput;
     } catch (error) {
-        console.error('[ai][text] Gemini processing failed, using fallback', {
+        console.error('[ai][file] Gemini processing failed, using fallback', {
             fileId: file.id,
             fileName: file.originalName,
             error: error.message
         });
-        return buildFallbackTextOutput(content);
+        return {
+            ...buildFallbackTextOutput(content || file.originalName || ''),
+            type: deriveOutputType(file, mimeType)
+        };
     }
 }
 
 module.exports = {
-    processTextFile
+    processNonImageFile
 };

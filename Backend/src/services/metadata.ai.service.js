@@ -1,6 +1,6 @@
 const File = require('../models/file.model');
 const Metadata = require('../models/metadata.model');
-const { processTextFile } = require('./textProcessor');
+const { processNonImageFile } = require('./textProcessor');
 const { processImageFile } = require('./imageProcessor');
 
 function buildDefaultOutput(file) {
@@ -12,7 +12,7 @@ function buildDefaultOutput(file) {
         objects: [],
         sensitive_flags: [],
         pii_detected: false,
-        language: file.format === 'TEXT' ? 'unknown' : 'n/a',
+        language: file.format === 'IMAGE' ? 'n/a' : 'unknown',
         source: 'default'
     };
 }
@@ -31,10 +31,10 @@ exports.generateForDataset = async (datasetId) => {
 
         let aiOutput = buildDefaultOutput(file);
 
-        if (file.format === 'TEXT') {
-            aiOutput = await processTextFile(file);
-        } else if (file.format === 'IMAGE') {
+        if (file.format === 'IMAGE') {
             aiOutput = await processImageFile(file);
+        } else {
+            aiOutput = await processNonImageFile(file);
         }
 
         // Save metadata

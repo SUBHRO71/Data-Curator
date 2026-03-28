@@ -15,6 +15,15 @@ exports.processUpload = async (datasetName, uploadedFiles, userId) => {
         const mimeType = file.mimetype;
         if (mimeType.startsWith('image/')) format = 'IMAGE';
         else if (mimeType.startsWith('text/') || mimeType === 'application/json' || mimeType === 'text/csv') format = 'TEXT';
+        else if (
+            mimeType === 'application/pdf' ||
+            mimeType === 'application/msword' ||
+            mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+            mimeType === 'application/vnd.ms-excel' ||
+            mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+            mimeType === 'application/vnd.ms-powerpoint' ||
+            mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+        ) format = 'DOCUMENT';
         else if (mimeType.startsWith('audio/')) format = 'AUDIO';
         else if (mimeType.startsWith('video/')) format = 'VIDEO';
 
@@ -22,6 +31,7 @@ exports.processUpload = async (datasetName, uploadedFiles, userId) => {
             datasetId: dataset.id,
             originalName: file.originalname,
             storedPath: file.path,
+            mimeType,
             format: format,
             sizeBytes: file.size,
             status: 'Ready'
